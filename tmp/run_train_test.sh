@@ -82,7 +82,7 @@ accelerate launch \
   --framework.qwenvl.attn_implementation sdpa \
   --datasets.vla_data.data_mix libero_goal \
   --datasets.vla_data.per_device_batch_size 2 \
-  --trainer.max_train_steps 10 \
+  --trainer.max_train_steps 10000 \
   --trainer.save_interval 999999 \
   --trainer.eval_interval 5 \
   --trainer.logging_frequency 2 \
