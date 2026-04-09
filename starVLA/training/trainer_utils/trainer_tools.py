@@ -5,12 +5,12 @@ Utility classes defining a Metrics container and multiple Trackers to enable mod
 endpoints (e.g., JSONL local logs, Weights & Biases).
 """
 
-import json
-import re
 from typing import Tuple
-
+import re
+import json
 import numpy as np
 import torch
+
 from accelerate.logging import get_logger
 
 logger = get_logger(__name__)
@@ -65,6 +65,12 @@ def build_param_lr_groups(model, cfg):
     base_lr = lr_cfg.get("base", 1e-4)  # default base learning rate
 
     freeze_modules = cfg.trainer.get("freeze_modules", "")
+    # Normalize: bool ``true`` from YAML should be treated as empty (no freeze);
+    # list/tuple values are joined into a comma-separated string.
+    if isinstance(freeze_modules, bool):
+        freeze_modules = ""
+    if isinstance(freeze_modules, (list, tuple)):
+        freeze_modules = ",".join(str(m) for m in freeze_modules)
     if not isinstance(freeze_modules, str):
         freeze_modules = ""
     freeze_patterns = [p.strip() for p in freeze_modules.split(",") if p.strip()]
@@ -123,8 +129,8 @@ def only_main_process(func):
     return wrapper
 
 
-from PIL import Image
 from torchvision.ops import box_iou
+from PIL import Image
 
 
 def resize_images(images, target_size=(224, 224)):
@@ -141,6 +147,9 @@ def resize_images(images, target_size=(224, 224)):
         return [resize_images(img, target_size) for img in images]
     else:
         raise ValueError("Unsupported image type or structure.")
+
+
+import torch.distributed as dist
 
 
 class TrainerUtils:
@@ -162,9 +171,16 @@ class TrainerUtils:
           - model:
         """
         frozen = []
-        print("#" * 30)
+        print("#"*30)
         print(freeze_modules)
-        if freeze_modules and type(freeze_modules) == str:
+        # Normalize freeze_modules: accept str, list, or bool.
+        # A bare ``True`` (e.g. from YAML ``freeze_modules: true``) is
+        # silently ignored so that it does not accidentally skip freezing.
+        if isinstance(freeze_modules, bool):
+            freeze_modules = ""
+        if isinstance(freeze_modules, (list, tuple)):
+            freeze_modules = ",".join(str(m) for m in freeze_modules)
+        if freeze_modules and isinstance(freeze_modules, str):
             # split and remove whitespace
             patterns = [p.strip() for p in freeze_modules.split(",") if p.strip()] if freeze_modules else []
 
@@ -185,7 +201,7 @@ class TrainerUtils:
                     continue
 
         # accelerator.wait_for_everyone()  # synchronize when distributed training
-        if dist.get_rank() == 0:
+        if dist.is_initialized() and dist.get_rank() == 0:
             print(f"🔒 Frozen modules with re pattern: {frozen}")
         return model
 
@@ -467,8 +483,7 @@ class TrainerUtils:
 
         # 获取所有符合命名规则，支持 .pt 和 .safetensors
         checkpoints = [
-            f
-            for f in os.listdir(checkpoint_dir)
+            f for f in os.listdir(checkpoint_dir) 
             if re.match(r"steps_(\d+)_(?:pytorch_model\.pt|model\.safetensors)$", f)
             and os.path.isfile(os.path.join(checkpoint_dir, f))  # 确保是文件
         ]
@@ -494,7 +509,6 @@ class TrainerUtils:
         latest_checkpoint_path = os.path.join(checkpoint_dir, latest_checkpoint)
         self.accelerator.print(f"Latest checkpoint found: {latest_checkpoint_path}")
         return latest_checkpoint_path, completed_steps
-
 
 import os
 
