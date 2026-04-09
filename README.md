@@ -4,7 +4,13 @@ Collecting, integrating, and exploring cutting-edge technologies for generalist 
 <!-- [![Update](https://img.shields.io/badge/UPDATE-Scripts%20fixed%20%7C%20Packaging%20smoother-red?style=for-the-badge)](https://github.com/starVLA/starVLA) -->
 [![Model & Data on Hugging Face](https://img.shields.io/badge/HuggingFace-Model%20%26%20Data-orange?style=for-the-badge&logo=huggingface)](https://huggingface.co/StarVLA) [![WeChat](https://img.shields.io/badge/WeChat-加入讨论群-brightgreen?style=for-the-badge&logo=wechat)](https://github.com/starVLA/starVLA/issues/64#issuecomment-3715403845)
 
-**[2026/04/06]** 🚀 **StarVLA** will soon release a major update. The new version will cover a much wider range of VL foundation models as backbones, **including world models (e.g., WM4A)**. Stay tuned!
+> **⚠️ Branch notice:** The `starVLA_dev` branch is where we actively merge new features and may be temporarily unstable. For verified results, use the stable `starVLA` branch. We encourage trying `starVLA_dev` and welcome PRs if you spot any issues!
+
+
+**[2026/04/09]** 🔜 A unified **multi-benchmark co-training** example (combining LIBERO, SimplerEnv, RoboTwin, VLA-Arena, etc.) is coming soon. Stay tuned!
+
+**[2026/04/09]** 🚀 **WM4A (World Model for Action)** is now integrated! Use pretrained video-generation DiT models (Cosmos-Predict2, Wan2.2) as backbones for action prediction. See [docs/WM4A.md](docs/WM4A.md) for architecture details and training instructions.
+
 
 **[2026/03/29]** 🔥 Thanks to the [ABot-M0](https://github.com/amap-cvlab/ABot-Manipulation) team for providing the [pre-trained weights](https://www.modelscope.cn/models/amap_cvlab/ABot-M0-Pretrain). For `Qwen3-VL 4B`, you can reload the `qwen_vl_interface` module in various frameworks!
 
