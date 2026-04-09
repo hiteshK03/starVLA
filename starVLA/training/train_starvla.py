@@ -16,6 +16,7 @@ import json
 import os
 import time
 from pathlib import Path
+from datetime import timedelta
 from typing import Tuple
 
 # Third-Party Libraries
@@ -23,7 +24,7 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import wandb
-from accelerate import Accelerator, DeepSpeedPlugin
+from accelerate import Accelerator, DeepSpeedPlugin, InitProcessGroupKwargs
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from omegaconf import OmegaConf
@@ -38,7 +39,11 @@ from starVLA.training.trainer_utils.config_tracker import AccessTrackedConfig, w
 from starVLA.training.trainer_utils.trainer_tools import TrainerUtils, build_param_lr_groups, normalize_dotlist_args
 
 deepspeed_plugin = DeepSpeedPlugin()
-accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin)
+# Avoid default c10d 30-minute timeout (1800000ms) on slow/imbalanced steps.
+# You can override via env: TORCH_DIST_TIMEOUT_MINUTES=1440
+dist_timeout_minutes = int(os.environ.get("TORCH_DIST_TIMEOUT_MINUTES", "1440"))
+process_group_kwargs = InitProcessGroupKwargs(timeout=timedelta(minutes=dist_timeout_minutes))
+accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, kwargs_handlers=[process_group_kwargs])
 accelerator.print(accelerator.state)
 
 # Sane Defaults
