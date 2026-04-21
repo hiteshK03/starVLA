@@ -116,7 +116,7 @@ class ModelClient:
         raw_action = {
             "world_vector": np.array(raw_actions[0, :3]),
             "rotation_delta": np.array(raw_actions[0, 3:6]),
-            "open_gripper": np.array(raw_actions[0, 6:7]),  # range [0, 1]; 1 = open; 0 = close
+            "open_gripper": np.array(raw_actions[0, 6:7]),  # {-1, 1}; 1 = open; -1 = close
         }
 
         return {"raw_action": raw_action}
@@ -126,12 +126,14 @@ class ModelClient:
         mask = action_norm_stats.get("mask", np.ones_like(action_norm_stats["min"], dtype=bool))
         action_high, action_low = np.array(action_norm_stats["max"]), np.array(action_norm_stats["min"])
         normalized_actions = np.clip(normalized_actions, -1, 1)
-        normalized_actions[:, 6] = np.where(normalized_actions[:, 6] < 0.5, 0, 1)
+        # Denormalize position/rotation dims (0-5) with min_max
         actions = np.where(
             mask,
             0.5 * (normalized_actions + 1) * (action_high - action_low) + action_low,
             normalized_actions,
         )
+        # Gripper: threshold at 0 and map to {-1, 1} for LIBERO (matching VLANeXt exactly)
+        actions[:, 6] = np.where(normalized_actions[:, 6] > 0, 1.0, -1.0)
 
         return actions
 
@@ -150,7 +152,10 @@ class ModelClient:
     def get_action_chunk_size(policy_ckpt_path):
         model_config, _ = read_mode_config(policy_ckpt_path)  # read config and norm_stats
         # import ipdb; ipdb.set_trace()
-        return model_config["framework"]["action_model"]["future_action_window_size"] + 1
+        action_model = model_config["framework"]["action_model"]
+        if "future_action_window_size" in action_model:
+            return action_model["future_action_window_size"] + 1
+        return action_model.get("action_horizon", 8)
 
     def _resize_image(self, image: np.ndarray) -> np.ndarray:
         image = cv.resize(image, tuple(self.image_size), interpolation=cv.INTER_AREA)

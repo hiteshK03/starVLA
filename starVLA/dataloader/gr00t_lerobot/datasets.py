@@ -1345,8 +1345,18 @@ class LeRobotSingleDataset(Dataset):
             state = []
             for state_key in self.modality_keys["state"]:
                 state.append(data[state_key])
-            state = np.concatenate(state, axis=1).astype(np.float16)
-            sample["state"] = state
+            state = np.concatenate(state, axis=1).astype(np.float32)
+
+            # VLANeXt gripper normalization: if enabled, the last 2 state dims
+            # are raw gripper finger qpos [0, 0.04]. Normalize them into a
+            # single [0, 1] dim: 1.0 - mean(abs(qpos)) / 0.04.
+            if self.data_cfg.get("proprio_gripper_normalize", False):
+                gripper_qpos = state[:, -2:]  # (T, 2)
+                gripper_norm = 1.0 - (np.mean(np.abs(gripper_qpos), axis=-1, keepdims=True) / 0.04)
+                gripper_norm = np.clip(gripper_norm, 0.0, 1.0)
+                state = np.concatenate([state[:, :-2], gripper_norm], axis=-1)
+
+            sample["state"] = state.astype(np.float16)
 
         return sample
 

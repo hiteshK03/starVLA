@@ -21,8 +21,10 @@ class Libero4in1DataConfig:
         "state.roll",
         "state.pitch",
         "state.yaw",
-        "state.pad",
-        "state.gripper",
+        # Both gripper finger qpos needed for VLANeXt normalization:
+        # 1.0 - mean(abs(qpos[6:8])) / 0.04 → single [0,1] dim
+        "state.pad",      # finger 1 qpos (idx 6)
+        "state.gripper",  # finger 2 qpos (idx 7)
     ]
     action_keys = [
         "action.x",
@@ -36,7 +38,8 @@ class Libero4in1DataConfig:
     language_keys = ["annotation.human.action.task_description"]
     observation_indices = [0]
     action_indices = list(range(8))
-    state_indices = list(range(-16, 0))
+    # 8 timesteps of proprio including current (t-7 to t), matching VLANeXt history_len=8
+    state_indices = list(range(-7, 1))
 
     def modality_config(self):
         return {
@@ -58,6 +61,7 @@ class Libero4in1DataConfig:
                     "action.roll": "min_max",
                     "action.pitch": "min_max",
                     "action.yaw": "min_max",
+                    "action.gripper": "min_max",
                 },
             ),
         ])
@@ -88,6 +92,15 @@ DATASET_NAMED_MIXTURES = {
     ],
     "libero_goal": [
         ("libero_goal_no_noops_1.0.0_lerobot", 1.0, "libero_franka"),
+    ],
+    "libero_spatial": [
+        ("libero_spatial_no_noops_1.0.0_lerobot", 1.0, "libero_franka"),
+    ],
+    "libero_object": [
+        ("libero_object_no_noops_1.0.0_lerobot", 1.0, "libero_franka"),
+    ],
+    "libero_10": [
+        ("libero_10_no_noops_1.0.0_lerobot", 1.0, "libero_franka"),
     ],
     "multi_robot": [
         ("LEROBOT_LIBERO_DATA/libero_10_no_noops_1.0.0_lerobot", 1.0, "libero_franka"),

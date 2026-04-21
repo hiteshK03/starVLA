@@ -40,7 +40,7 @@ def build_dataloader(
 ):  # TODO now here only is get dataset, we need mv dataloader to here
 
     if dataset_py == "lerobot_datasets":
-        from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset, make_padding_collate_fn
+        from starVLA.dataloader.lerobot_datasets import collate_fn, get_vla_dataset, make_padding_collate_fn, make_augmenting_collate_fn
 
         vla_dataset_cfg = cfg.datasets.vla_data
 
@@ -58,12 +58,20 @@ def build_dataloader(
         else:
             chosen_collate_fn = collate_fn
 
+        # Wrap with data augmentation if configured
+        aug_cfg = getattr(vla_dataset_cfg, "augmentation", None)
+        if aug_cfg and getattr(aug_cfg, "enabled", False):
+            chosen_collate_fn = make_augmenting_collate_fn(chosen_collate_fn, aug_cfg)
+            logger.info("Data augmentation enabled in collate_fn")
+
         vla_train_dataloader = DataLoader(
             vla_dataset,
             batch_size=cfg.datasets.vla_data.per_device_batch_size,
             collate_fn=chosen_collate_fn,
-            num_workers=4,
-            # shuffle=True
+            num_workers=8,
+            pin_memory=True,
+            persistent_workers=True,
+            prefetch_factor=4,
         )
         if (dist.is_initialized() and dist.get_rank() == 0) or not dist.is_initialized():
 

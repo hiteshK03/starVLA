@@ -249,19 +249,11 @@ class baseframework(PreTrainedModel):
         # logger.info(f"Loading model weights from `{pretrained_checkpoint}`")
         model_keys = set(FrameworkModel.state_dict().keys())
         checkpoint_keys = set(model_state_dict.keys())
-        try:
-            FrameworkModel.load_state_dict(model_state_dict, strict=True)
-        except RuntimeError as e:
-            # must keep all keys matched
-            common_keys = model_keys.intersection(checkpoint_keys)
-            missing_keys = model_keys - common_keys
-            unexpected_keys = checkpoint_keys - common_keys
-            if missing_keys:
-                logger.warning(f"Missing keys in state_dict: {missing_keys}")
-            if unexpected_keys:
-                logger.warning(f"Unexpected keys in state_dict: {unexpected_keys}")
-
-            raise e
+        result = FrameworkModel.load_state_dict(model_state_dict, strict=False)
+        if result.missing_keys:
+            logger.warning(f"Missing keys (randomly initialized): {result.missing_keys}")
+        if result.unexpected_keys:
+            logger.warning(f"Unexpected keys (ignored): {result.unexpected_keys}")
 
         # **ensure model is on GPU**
         FrameworkModel = FrameworkModel

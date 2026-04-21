@@ -120,6 +120,7 @@ def eval_libero(args: Args) -> None:
             t = 0
             replay_images = []
             full_actions = []
+            state_history = []  # proprio history for VLANeXt (8 timesteps)
 
             logging.info(f"Starting episode {task_episodes + 1}...")
             step = 0
@@ -142,25 +143,33 @@ def eval_libero(args: Args) -> None:
                 # Save preprocessed image for replay video
                 replay_images.append(img)
 
+                # VLANeXt proprio: 6D pose + normalized gripper [0,1]
+                gripper_norm = np.clip(
+                    1.0 - (np.mean(np.abs(obs["robot0_gripper_qpos"])) / 0.04),
+                    0.0, 1.0,
+                )
                 state = np.concatenate(
                     (
                         obs["robot0_eef_pos"],
                         _quat2axisangle(obs["robot0_eef_quat"]),
-                        obs["robot0_gripper_qpos"],
+                        [gripper_norm],
                     )
-                )
+                ).astype(np.float32)
+                state_history.append(state)
 
-                observation = {  #
-                    "observation.primary": np.expand_dims(img, axis=0),  # (H, W, C), dtype=unit8, range(0-255)
-                    "observation.wrist_image": np.expand_dims(wrist_img, axis=0),  # (H, W, C)
-                    "observation.state": np.expand_dims(state, axis=0),
-                    "instruction": [str(task_description)],
-                }
+                # Build 8-step proprio history (pad with first state if < 8)
+                history_len = 8
+                if len(state_history) < history_len:
+                    padded = ([state_history[0]] * (history_len - len(state_history))) + list(state_history)
+                else:
+                    padded = list(state_history[-history_len:])
+                proprio = np.stack(padded)  # (8, 7)
 
                 # align key with model API --> two images provided here --> check training
                 example_dict = {
-                    "image": [observation["observation.primary"][0], observation["observation.wrist_image"][0]],
-                    "lang": observation["instruction"][0],
+                    "image": [img, wrist_img],
+                    "lang": str(task_description),
+                    "state": proprio,
                 }
 
                 start_time = time.time()
@@ -175,10 +184,10 @@ def eval_libero(args: Args) -> None:
 
                 world_vector_delta = np.asarray(raw_action.get("world_vector"), dtype=np.float32).reshape(-1)
                 rotation_delta = np.asarray(raw_action.get("rotation_delta"), dtype=np.float32).reshape(-1)
-                open_gripper = np.asarray(raw_action.get("open_gripper"), dtype=np.float32).reshape(-1)
-                gripper = _binarize_gripper_open(open_gripper)
+                # Gripper is already {-1, 1} from unnormalize_actions (matching VLANeXt)
+                gripper = np.asarray(raw_action.get("open_gripper"), dtype=np.float32).reshape(-1)
 
-                if not (world_vector_delta.size == 3 and rotation_delta.size == 3 and open_gripper.size == 1):
+                if not (world_vector_delta.size == 3 and rotation_delta.size == 3 and gripper.size == 1):
                     logging.warning(
                         f"Unexpected action sizes: "
                         f"wv={world_vector_delta.shape}, rot={rotation_delta.shape}, grip={gripper.shape}. "

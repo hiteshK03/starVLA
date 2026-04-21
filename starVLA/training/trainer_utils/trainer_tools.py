@@ -265,7 +265,19 @@ class TrainerUtils:
                     print(f"❌ cannot find module path: {path}")
         else:  # full load
             try:
-                model.load_state_dict(checkpoint, strict=False)
+                # Filter out keys with shape mismatches (e.g. loading diffusion
+                # checkpoint into classification model)
+                model_state = model.state_dict()
+                filtered_checkpoint = {}
+                skipped = []
+                for k, v in checkpoint.items():
+                    if k in model_state and model_state[k].shape != v.shape:
+                        skipped.append(k)
+                    else:
+                        filtered_checkpoint[k] = v
+                if skipped and dist.get_rank() == 0:
+                    print(f"⚠️ Skipped {len(skipped)} keys with shape mismatch: {skipped}")
+                model.load_state_dict(filtered_checkpoint, strict=False)
                 if dist.get_rank() == 0:
                     print("✅ loaded <full_model> model parameters")
                 loaded_modules = ["<full_model>"]

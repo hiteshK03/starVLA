@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 from omegaconf import OmegaConf
+import torchvision.transforms.functional as TVF
 
 from starVLA.dataloader.gr00t_lerobot.registry import (
     ROBOT_TYPE_CONFIG_MAP,
@@ -20,6 +21,113 @@ from starVLA.dataloader.gr00t_lerobot.embodiment_tags import EmbodimentTag
 
 def collate_fn(batch):
     return batch
+
+
+def make_augmenting_collate_fn(base_collate_fn, aug_cfg):
+    """Wrap a collate_fn to apply data augmentation to PIL images.
+
+    Mirrors VLANeXt's DataCollatorForVLANeXt._augment_frames_uint8 exactly:
+    uses RandomResizedCrop.get_params() for crop sampling, np.random for
+    color jitter, configurable augment_order, and hue clipping.
+
+    Args:
+        base_collate_fn: The underlying collate function (identity or padding).
+        aug_cfg: OmegaConf node with augmentation parameters.
+    """
+    from torchvision.transforms import RandomResizedCrop
+
+    rrc_cfg = aug_cfg.get("random_resized_crop", None)
+    rrc_scale = tuple(rrc_cfg.scale) if rrc_cfg else (0.9, 0.9)
+    rrc_ratio = tuple(rrc_cfg.ratio) if rrc_cfg else (1.0, 1.0)
+
+    rb = list(aug_cfg.get("random_brightness", [])) or None
+    rc = list(aug_cfg.get("random_contrast", [])) or None
+    rs = list(aug_cfg.get("random_saturation", [])) or None
+    rh = list(aug_cfg.get("random_hue", [])) or None
+    augment_order = list(aug_cfg.get("augment_order", [
+        "random_resized_crop", "random_brightness",
+        "random_contrast", "random_saturation", "random_hue",
+    ]))
+
+    def _uniform(a, b):
+        return float(np.random.uniform(a, b))
+
+    def _sample_brightness():
+        if not rb:
+            return 1.0
+        if len(rb) == 1:
+            x = float(rb[0])
+            return _uniform(1.0 - x, 1.0 + x)
+        return _uniform(float(rb[0]), float(rb[1]))
+
+    def _sample_contrast():
+        if not rc:
+            return 1.0
+        if len(rc) == 1:
+            x = float(rc[0])
+            return _uniform(1.0 - x, 1.0 + x)
+        return _uniform(float(rc[0]), float(rc[1]))
+
+    def _sample_saturation():
+        if not rs:
+            return 1.0
+        if len(rs) == 1:
+            x = float(rs[0])
+            return _uniform(1.0 - x, 1.0 + x)
+        return _uniform(float(rs[0]), float(rs[1]))
+
+    def _sample_hue():
+        if not rh:
+            return 0.0
+        if len(rh) == 1:
+            x = float(rh[0])
+            return _uniform(-x, x)
+        return _uniform(float(rh[0]), float(rh[1]))
+
+    def _augment_images(images):
+        """Apply augmentation to a list of PIL images with shared random params."""
+        if not images or not augment_order:
+            return images
+
+        out_h, out_w = images[0].size[1], images[0].size[0]  # PIL: (w, h)
+
+        # Sample crop params using torchvision's rejection sampling (same as VLANeXt)
+        crop_params = None
+        if "random_resized_crop" in augment_order and rrc_cfg is not None:
+            i, j, h, w = RandomResizedCrop.get_params(images[0], scale=rrc_scale, ratio=rrc_ratio)
+            crop_params = (i, j, h, w)
+
+        # Sample color jitter params once per sample
+        b_fac = _sample_brightness() if "random_brightness" in augment_order else 1.0
+        c_fac = _sample_contrast() if "random_contrast" in augment_order else 1.0
+        s_fac = _sample_saturation() if "random_saturation" in augment_order else 1.0
+        h_del = _sample_hue() if "random_hue" in augment_order else 0.0
+        h_del = float(np.clip(h_del, -0.5, 0.5))
+
+        augmented = []
+        for img in images:
+            for op in augment_order:
+                if op == "random_resized_crop" and crop_params is not None:
+                    ci, cj, ch, cw = crop_params
+                    img = TVF.resized_crop(img, ci, cj, ch, cw, size=(out_h, out_w))
+                elif op == "random_brightness":
+                    img = TVF.adjust_brightness(img, b_fac)
+                elif op == "random_contrast":
+                    img = TVF.adjust_contrast(img, c_fac)
+                elif op == "random_saturation":
+                    img = TVF.adjust_saturation(img, s_fac)
+                elif op == "random_hue":
+                    img = TVF.adjust_hue(img, h_del)
+            augmented.append(img)
+        return augmented
+
+    def augmenting_collate_fn(batch):
+        for sample in batch:
+            if "image" in sample and isinstance(sample["image"], list):
+                sample["image"] = _augment_images(sample["image"])
+        return base_collate_fn(batch)
+
+    return augmenting_collate_fn
 
 
 def make_padding_collate_fn(action_dim: int, action_horizon: int, state_dim: int | None = None):

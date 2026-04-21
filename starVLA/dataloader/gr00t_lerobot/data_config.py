@@ -106,6 +106,7 @@ class Libero4in1DataConfig:
                     "action.roll": "min_max",
                     "action.pitch": "min_max",
                     "action.yaw": "min_max",
+                    "action.gripper": "min_max",
                 },
             ),
         ]

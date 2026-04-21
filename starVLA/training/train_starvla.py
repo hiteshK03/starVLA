@@ -99,12 +99,16 @@ def setup_optimizer_and_scheduler(model, cfg) -> Tuple[torch.optim.Optimizer, to
         for group in optimizer.param_groups:
             logger.info(f"LR Group {group['name']}: lr={group['lr']}, num_params={len(group['params'])}")
 
+    # Accelerate/DeepSpeed divides num_training_steps by num_processes when
+    # it wraps the scheduler in prepare().  Pre-multiply so the effective
+    # cosine period equals the configured max_train_steps.
+    world_size = dist.get_world_size() if dist.is_initialized() else 1
     lr_scheduler = get_scheduler(
         name=cfg.trainer.lr_scheduler_type,
         optimizer=optimizer,
-        num_warmup_steps=cfg.trainer.num_warmup_steps,
-        num_training_steps=cfg.trainer.max_train_steps,
-        scheduler_specific_kwargs=cfg.trainer.scheduler_specific_kwargs,
+        num_warmup_steps=cfg.trainer.num_warmup_steps * world_size,
+        num_training_steps=cfg.trainer.max_train_steps * world_size,
+        scheduler_specific_kwargs=getattr(cfg.trainer, "scheduler_specific_kwargs", None) or {},
     )
 
     return optimizer, lr_scheduler
@@ -401,9 +405,11 @@ class VLATrainer(TrainerUtils):
             if self.accelerator.sync_gradients:
                 self.lr_scheduler.step()
 
-        return {
-            "action_dit_loss": action_loss.item(),
-        }
+        metrics = {"action_dit_loss": action_loss.item()}
+        for key in ("loss_pose", "loss_gripper", "loss_dct", "gripper_accuracy"):
+            if key in output_dict:
+                metrics[key] = output_dict[key]
+        return metrics
 
     def _finalize_training(self):
         """Training end processing."""
