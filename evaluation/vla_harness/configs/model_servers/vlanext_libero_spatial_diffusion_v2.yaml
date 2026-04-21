@@ -1,0 +1,8 @@
+# StarVLA-bridged VLANeXt — LIBERO Spatial (diffusion v2, 10k steps)
+script: "src/vla_eval/model_servers/starvla_vlanext.py"
+args:
+  checkpoint: /mnt/dcgpuval/hkandala/starVLA/results/Checkpoints/vlanext_libero_spatial_diffusion_v2/checkpoints/steps_10000_pytorch_model.pt
+  suite: libero_spatial
+  num_history: 8
+  chunk_size: 8
+  port: 8000

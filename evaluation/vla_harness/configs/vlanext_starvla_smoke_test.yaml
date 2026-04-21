@@ -1,0 +1,19 @@
+# Smoke test for StarVLA-bridged VLANeXt: 1 task, 2 episodes
+server:
+  url: "ws://localhost:8000"
+
+docker:
+  image: vla-eval-rocm/libero:latest
+  gpus: "none"
+
+output_dir: "./results"
+
+benchmarks:
+  - benchmark: "vla_eval.benchmarks.libero.benchmark:LIBEROBenchmark"
+    mode: sync
+    episodes_per_task: 2
+    max_tasks: 1
+    params:
+      suite: libero_spatial
+      seed: 7
+      num_steps_wait: 10
